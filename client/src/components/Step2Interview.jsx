@@ -35,6 +35,21 @@ function Step2Interview({ interviewData, onFinish }) {
 
   const currentQuestion = questions[currentIndex];
 
+  const startMic = () => {
+    if (recognitionRef.current && !isAIPlaying) {
+      try {
+        recognitionRef.current.start();
+      } catch (error) {
+        console.debug('Speech recognition could not start', error);
+      }
+    }
+  };
+
+  const stopMic = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+  };
 
   useEffect(() => {
     const loadVoices = () => {
@@ -153,6 +168,7 @@ function Step2Interview({ interviewData, onFinish }) {
 
         setIsIntroPhase(false)
       } else if (currentQuestion) {
+        setTimeLeft(currentQuestion.timeLimit || 60);
         await new Promise(r => setTimeout(r, 800));
 
         // If last question (hard level)
@@ -176,31 +192,47 @@ function Step2Interview({ interviewData, onFinish }) {
 
 
 
+  const submitAnswer = async () => {
+    if (isSubmitting) return;
+    stopMic();
+    setIsSubmitting(true);
+
+    try {
+      const result = await axios.post(ServerUrl + "/api/interview/submit-answer", {
+        interviewId,
+        questionIndex: currentIndex,
+        answer,
+        timeTaken: currentQuestion.timeLimit - timeLeft,
+      }, { withCredentials: true });
+
+      setFeedback(result.data.feedback);
+      speakText(result.data.feedback);
+      setIsSubmitting(false);
+    } catch (error) {
+      console.log(error);
+      setIsSubmitting(false);
+    }
+  }
+
   useEffect(() => {
     if (isIntroPhase) return;
     if (!currentQuestion) return;
-    
+
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          clearInterval(timer)
+          clearInterval(timer);
+          if (!isSubmitting && !feedback) {
+            submitAnswer();
+          }
           return 0;
         }
-        return prev - 1
-
-      })
+        return prev - 1;
+      });
     }, 1000);
 
-    return () => clearInterval(timer)
-
-  }, [isIntroPhase, currentIndex])
-
-  useEffect(() => {
-  if (!isIntroPhase && currentQuestion) {
-    setTimeLeft(currentQuestion.timeLimit || 60);
-  }
-}, [currentIndex]);
-
+    return () => clearInterval(timer);
+  }, [isIntroPhase, currentIndex, currentQuestion, feedback, isSubmitting]);
 
   useEffect(() => {
     if (!("webkitSpeechRecognition" in window)) return;
@@ -222,19 +254,6 @@ function Step2Interview({ interviewData, onFinish }) {
   }, []);
 
 
-  const startMic = () => {
-    if (recognitionRef.current && !isAIPlaying) {
-      try {
-        recognitionRef.current.start();
-      } catch { }
-    }
-  };
-
-  const stopMic = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-  };
   const toggleMic = () => {
     if (isMicOn) {
       stopMic();
@@ -244,29 +263,6 @@ function Step2Interview({ interviewData, onFinish }) {
     setIsMicOn(!isMicOn);
   };
 
-
-  const submitAnswer = async () => {
-    if (isSubmitting) return;
-    stopMic()
-    setIsSubmitting(true)
-
-    try {
-      const result = await axios.post(ServerUrl + "/api/interview/submit-answer", {
-        interviewId,
-        questionIndex: currentIndex,
-        answer,
-        timeTaken:
-          currentQuestion.timeLimit - timeLeft,
-      } , {withCredentials:true})
-
-      setFeedback(result.data.feedback)
-      speakText(result.data.feedback)
-      setIsSubmitting(false)
-    } catch (error) {
-console.log(error)
-setIsSubmitting(false)
-    }
-  }
 
   const handleNext =async () => {
     setAnswer("");
@@ -279,7 +275,9 @@ setIsSubmitting(false)
 
     await speakText("Alright, let's move to the next question.");
 
-    setCurrentIndex(currentIndex + 1);
+    const nextIndex = currentIndex + 1;
+    setCurrentIndex(nextIndex);
+    setTimeLeft(questions[nextIndex]?.timeLimit || 60);
     setTimeout(() => {
       if (isMicOn) startMic();
     }, 500);
@@ -300,15 +298,6 @@ setIsSubmitting(false)
     }
   }
 
-
-   useEffect(() => {
-    if (isIntroPhase) return;
-    if (!currentQuestion) return;
-
-    if (timeLeft === 0 && !isSubmitting && !feedback) {
-      submitAnswer()
-    }
-  }, [timeLeft]);
 
   useEffect(() => {
     return () => {

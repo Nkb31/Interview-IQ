@@ -20,7 +20,7 @@ function InterviewReport() {
     }
 
     fetchReport()
-  },[])
+  }, [id])
 
 
     if (!report) {

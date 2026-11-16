@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { BsRobot } from "react-icons/bs";
 import { IoSparkles } from "react-icons/io5";
 import { motion } from "motion/react"
@@ -11,22 +11,29 @@ import { useDispatch } from 'react-redux';
 import { setUserData } from '../redux/userSlice';
 function Auth({isModel = false}) {
     const dispatch = useDispatch()
+    const [isSigningIn, setIsSigningIn] = useState(false)
+    const [authError, setAuthError] = useState("")
 
     const handleGoogleAuth = async () => {
+        setIsSigningIn(true)
+        setAuthError("")
         try {
             const response = await signInWithPopup(auth,provider)
-            let User = response.user
-            let name = User.displayName
-            let email = User.email
+            const name = response.user.displayName
+            const email = response.user.email
             const result = await axios.post(ServerUrl + "/api/auth/google" , {name , email} , {withCredentials:true})
             dispatch(setUserData(result.data))
-            
-
-
-            
         } catch (error) {
-            console.log(error)
-              dispatch(setUserData(null))
+            console.error("Google sign-in failed", error)
+            if (error.code === "auth/configuration-not-found") {
+                setAuthError("Google sign-in is not configured for this Firebase project. Enable Google in Firebase Authentication and add localhost to the authorized domains.")
+            } else if (error.code === "auth/popup-closed-by-user") {
+                setAuthError("Sign-in was cancelled. Please try again.")
+            } else {
+                setAuthError("Unable to sign in. Please try again.")
+            }
+        } finally {
+            setIsSigningIn(false)
         }
     }
   return (
@@ -65,14 +72,20 @@ function Auth({isModel = false}) {
         track your progress, and unlock detailed performance insights.
             </p>
 
+            {authError && (
+                <p role="alert" className="text-red-600 text-sm text-center mb-4">
+                    {authError}
+                </p>
+            )}
 
             <motion.button 
             onClick={handleGoogleAuth}
+            disabled={isSigningIn}
             whileHover={{opacity:0.9 , scale:1.03}}
             whileTap={{opacity:1 , scale:0.98}}
-            className='w-full flex items-center justify-center gap-3 py-3 bg-black text-white rounded-full shadow-md '>
+            className='w-full flex items-center justify-center gap-3 py-3 bg-black text-white rounded-full shadow-md disabled:opacity-60'>
                 <FcGoogle size={20}/>
-                Continue with Google
+                {isSigningIn ? "Signing in..." : "Continue with Google"}
 
    
             </motion.button>
